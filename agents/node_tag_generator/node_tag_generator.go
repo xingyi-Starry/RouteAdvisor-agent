@@ -1,4 +1,4 @@
-package agents
+package node_tag_generator
 
 import (
 	"context"

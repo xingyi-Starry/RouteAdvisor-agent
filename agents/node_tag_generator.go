@@ -18,19 +18,19 @@ const prompt = `你是一个地理信息系统专家，负责为给定的地理�
 [{"id":6146512085,"name":"麦当劳","lat":39.9622611,"lon":116.3513657},{"id":6041100036,"name":"楼上楼茶餐厅","lat":39.961991,"lon":116.352893},{"id":8810354632,"name":"音乐喷泉","lat":39.9598892,"lon":116.3516116},{"id":3511264386,"name":"南区超市","lat":39.9581307,"lon":116.3510136}]
 <输入示例 />
 <对应输出示例>
-[{"id":"6146512085","name":"麦当劳","lat":39.9622611,"lon":116.3513657,"tag":"美食"},{"id":"6041100036","name":"楼上楼茶餐厅","lat":39.961991,"lon":116.352893,"tag":"美食"},{"id":"8810354632","name":"音乐喷泉","lat":39.9598892,"lon":116.3516116,"tag":"娱乐"},{"id":"3511264386","name":"南区超市","lat":39.9581307,"lon":116.3510136,"tag":"购物"}]
+[{"id":6146512085,"name":"麦当劳","lat":39.9622611,"lon":116.3513657,"tag":"美食"},{"id":6041100036,"name":"楼上楼茶餐厅","lat":39.961991,"lon":116.352893,"tag":"美食"},{"id":8810354632,"name":"音乐喷泉","lat":39.9598892,"lon":116.3516116,"tag":"娱乐"},{"id":3511264386,"name":"南区超市","lat":39.9581307,"lon":116.3510136,"tag":"购物"}]
 <对应输出示例 />
 `
 
 type BasicNode struct {
-	Id   string  `json:"id"`
+	Id   int     `json:"id"`
 	Name string  `json:"name"`
 	Lat  float64 `json:"lat"`
 	Lon  float64 `json:"lon"`
 }
 
 type TargetNode struct {
-	Id   string  `json:"id"`
+	Id   int     `json:"id"`
 	Name string  `json:"name"`
 	Lat  float64 `json:"lat"`
 	Lon  float64 `json:"lon"`
@@ -39,6 +39,12 @@ type TargetNode struct {
 
 type NodeTagGenerator struct {
 	modelConfig *ai.ModelConfig
+}
+
+func NewNodeTagGenerator(modelConfig *ai.ModelConfig) *NodeTagGenerator {
+	return &NodeTagGenerator{
+		modelConfig: modelConfig,
+	}
 }
 
 func (agent *NodeTagGenerator) GenerateTag(ctx context.Context, nodes []BasicNode) ([]TargetNode, error) {
@@ -64,7 +70,7 @@ func (agent *NodeTagGenerator) GenerateTag(ctx context.Context, nodes []BasicNod
 	for msg := range questionChan {
 		answer += msg
 	}
-
+	logrus.Debug(answer) // debug
 	result := []TargetNode{}
 	err = json.Unmarshal([]byte(answer), &result)
 	if err != nil {

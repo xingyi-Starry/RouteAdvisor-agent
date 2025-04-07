@@ -5,6 +5,7 @@ import (
 
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
+	"github.com/sirupsen/logrus"
 )
 
 type ModelConfig struct {
@@ -60,5 +61,6 @@ func InvokeLLM(ctx context.Context, question AiQuestion, model ModelConfig) (<-c
 			}
 		}
 	}()
+	logrus.Debugf("streaming started")
 	return ch, nil
 }

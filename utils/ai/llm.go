@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"sync"
 
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
@@ -15,6 +16,7 @@ type ModelLLM struct {
 	Sem       chan struct{}
 	Limiter   rate.Limiter
 	Queue     chan task
+	once      sync.Once
 }
 
 type ModelLLMConfig struct {
@@ -74,60 +76,70 @@ func NewModelLLM(config *ModelLLMConfig) *ModelLLM {
 }
 
 func (model *ModelLLM) Run() {
-	go func() {
-		for {
-			t := <-model.Queue
-			// 先控制频率
-			if err := model.Limiter.Wait(t.Ctx); err != nil {
-				logrus.Error(err)
-				continue
-			}
-
-			// 再控制并发
-			<-model.Sem
-
-			logrus.Debug("task started")
-
-			// 执行请求
-			go func(t task) {
-				defer func() {
-					logrus.Debug("task finished")
-					model.Sem <- struct{}{}
-				}() // 释放信号量
-				defer close(t.Ch) // 关闭通道
-
-				// 构造对话
-				messages := []openai.ChatCompletionMessageParamUnion{
-					openai.SystemMessage(t.Msg.SystemPrompt),
-				}
-				for _, h := range t.Msg.History {
-					messages = append(messages, openai.UserMessage(h.UserContent))
-					messages = append(messages, openai.SystemMessage(h.AiContent))
-				}
-				messages = append(messages, openai.UserMessage(t.Msg.Question))
-
-				// 构造请求参数
-				params := openai.ChatCompletionNewParams{
-					Model:    model.ModelName,
-					Seed:     openai.Int(t.Msg.Seed),
-					Messages: messages,
+	model.once.Do(func() {
+		go func() {
+			for {
+				t := <-model.Queue
+				// 先控制频率
+				if err := model.Limiter.Wait(t.Ctx); err != nil {
+					logrus.Error(err)
+					continue
 				}
 
-				// 流式请求
-				stream := model.Client.Chat.Completions.NewStreaming(t.Ctx, params)
-				for stream.Next() {
-					evt := stream.Current()
-					if len(evt.Choices) > 0 {
-						t.Ch <- evt.Choices[0].Delta.Content
-						// fmt.Print(evt.Choices[0].Delta.Content) // debug
+				// 再控制并发
+				<-model.Sem
+
+				logrus.Debug("task started")
+
+				// 执行请求
+				go func(t task) {
+					defer func() {
+						logrus.Debug("task finished")
+						model.Sem <- struct{}{}
+					}() // 释放信号量
+					defer close(t.Ch) // 关闭通道
+
+					// 构造对话
+					messages := []openai.ChatCompletionMessageParamUnion{
+						openai.SystemMessage(t.Msg.SystemPrompt),
 					}
-				}
-			}(t)
-		}
-	}()
+					for _, h := range t.Msg.History {
+						messages = append(messages, openai.UserMessage(h.UserContent))
+						messages = append(messages, openai.SystemMessage(h.AiContent))
+					}
+					messages = append(messages, openai.UserMessage(t.Msg.Question))
+
+					// 构造请求参数
+					params := openai.ChatCompletionNewParams{
+						Model:    model.ModelName,
+						Seed:     openai.Int(t.Msg.Seed),
+						Messages: messages,
+					}
+
+					// 流式请求
+					stream := model.Client.Chat.Completions.NewStreaming(t.Ctx, params)
+					for stream.Next() {
+						evt := stream.Current()
+						if len(evt.Choices) > 0 {
+							t.Ch <- evt.Choices[0].Delta.Content
+							// fmt.Print(evt.Choices[0].Delta.Content) // debug
+						}
+					}
+				}(t)
+			}
+		}()
+	})
 }
 
-func InvokeLLM(ctx context.Context, msgs Messages, model *ModelLLM) <-chan string {
+type LLM interface {
+	Enqueue(task)
+}
+
+func (model *ModelLLM) Enqueue(t task) {
+	model.Queue <- t
+}
+
+func InvokeLLM(ctx context.Context, msgs Messages, model LLM) <-chan string {
 	ch := make(chan string, 5) // 响应通道
 
 	// 任务加入队列
@@ -136,7 +148,7 @@ func InvokeLLM(ctx context.Context, msgs Messages, model *ModelLLM) <-chan strin
 		Ch:  ch,
 		Ctx: ctx,
 	}
-	model.Queue <- t
+	model.Enqueue(t)
 
 	return ch
 }

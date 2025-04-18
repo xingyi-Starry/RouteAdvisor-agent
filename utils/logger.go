@@ -53,7 +53,7 @@ func (t *LogFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 	return b.Bytes(), nil
 }
 
-func LoggerInit() {
+func InitLogger() {
 	logrus.SetOutput(os.Stdout)          //设置输出类型
 	logrus.SetReportCaller(true)         //开启返回函数名和行号
 	logrus.SetFormatter(&LogFormatter{}) //设置自己定义的Formatter

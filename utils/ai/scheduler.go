@@ -8,14 +8,14 @@ type Strategy interface {
 	Next() int
 }
 
-type LoadBalancer struct {
+type Scheduler struct {
 	Models   []*ModelLLM
 	total    int
 	Strategy Strategy
 }
 
-func NewLoadBalancer(strategy int, models ...*ModelLLM) *LoadBalancer {
-	balancer := &LoadBalancer{
+func NewScheduler(strategy int, models ...*ModelLLM) *Scheduler {
+	balancer := &Scheduler{
 		Models: models,
 		total:  len(models),
 	}
@@ -28,19 +28,18 @@ func NewLoadBalancer(strategy int, models ...*ModelLLM) *LoadBalancer {
 	return balancer
 }
 
-func (b *LoadBalancer) Run() {
+func (b *Scheduler) Run() {
 	for _, model := range b.Models {
 		model.Run()
 	}
 }
 
-func (b *LoadBalancer) AddModel(model *ModelLLM) {
-	model.Run()
+func (b *Scheduler) AddModel(model *ModelLLM) {
 	b.Models = append(b.Models, model)
 	b.total++
 }
 
-func (b *LoadBalancer) Enqueue(t task) {
+func (b *Scheduler) Enqueue(t task) {
 	b.Models[b.Strategy.Next()].Enqueue(t)
 }
 

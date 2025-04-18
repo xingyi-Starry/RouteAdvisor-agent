@@ -2,48 +2,54 @@ package node_tag_generator
 
 import (
 	"context"
-	"fmt"
-	"route-advisor-agent/utils/ai"
-
 	"encoding/json"
+	"fmt"
+
+	"route-advisor-agent/utils/ai"
 
 	"github.com/sirupsen/logrus"
 )
 
-const prompt = `你是一个地理信息系统专家，负责为给定的地理节点生成标签。请根据以下节点列表中节点的名称生成包含标签的目标节点信息。标签只能在以下几项中选择：["美食", "景点", "购物", "交通", "住宿", "娱乐", "文化", "教育", "医疗", "体育", "default"]，其中"default"仅在节点名字为空或者无其它合适选项时使用。请确保生成的标签与节点名称相关，并且一个节点只包含一个标签。
+const prompt = `你是一个地理信息系统专家，负责为给定的地理节点补全信息。给定的地理节点都位于首钢园。需要补全的信息有类型(type)、标签组(tags)、描述(description)、热度(heat)、评分(rate)。类型只能在以下几项中选择：["美食", "景点", "购物", "交通", "住宿", "娱乐", "厕所"]，标签可以是任意简短的符合特征的中文描述，如"咖啡"、"文化"、"户外"、"家庭"等，每个节点最少需要3个标签。描述是对于该节点的详细描述，不超过50字。热度是一个整数，范围在1到10000之间，表示该节点的热度。评分是一个浮点数，范围在0到5之间，保留1位小数，表示该节点的评分。
 
-注意，请不要添加任何额外的文本或解释，除了新增的标签以外不要修改其它信息，只返回 JSON 格式的目标节点列表信息，并保持顺序不变。确保输出的 JSON 格式正确，并且包含所有必要的字段。请遵循以下示例格式：
+注意，除了新增的字段以外不要修改其它信息，请不要添加任何额外的文本或解释，只返回 JSON 格式的目标节点列表信息，并保持顺序不变。确保输出的 JSON 格式正确，并且包含所有必要的字段。请遵循以下示例格式：
 
 <输入示例>
-[{"id":6146512085,"name":"麦当劳","lat":39.9622611,"lon":116.3513657},{"id":6041100036,"name":"楼上楼茶餐厅","lat":39.961991,"lon":116.352893},{"id":8810354632,"name":"音乐喷泉","lat":39.9598892,"lon":116.3516116},{"id":3511264386,"name":"南区超市","lat":39.9581307,"lon":116.3510136}]
+[{"id":130,"node":12064974127,"name":"全家"},{"id":131,"node":12064974128,"name":"五一剧场"},{"id":132,"node":12064974129,"name":"瑞幸咖啡"}]
 <输入示例 />
 <对应输出示例>
-[{"id":6146512085,"name":"麦当劳","lat":39.9622611,"lon":116.3513657,"tag":"美食"},{"id":6041100036,"name":"楼上楼茶餐厅","lat":39.961991,"lon":116.352893,"tag":"美食"},{"id":8810354632,"name":"音乐喷泉","lat":39.9598892,"lon":116.3516116,"tag":"娱乐"},{"id":3511264386,"name":"南区超市","lat":39.9581307,"lon":116.3510136,"tag":"购物"}]
+[{"id":130,"node":12064974127,"name":"全家","type":"购物","tags":["便利店","连锁","实惠"],"description":"景区内的便利店，提供日常生活用品和食品饮料。","heat":2514,"rate":4.2},
+{"id":131,"node":12064974128,"name":"五一剧场","type":"娱乐","tags":["演出","文化","艺术"],"description":"历史悠久的剧场，经常举办各类文艺演出和活动。","heat":197,"rate":4.7},
+{"id":132,"node":12064974129,"name":"瑞幸咖啡","type":"美食","tags":["咖啡","连锁","休闲"],"description":"提供各类咖啡饮品和轻食的连锁咖啡店。","heat":7649,"rate":4.5}]
 <对应输出示例 />
+
+请根据以上示例补全提供的地理节点信息，返回完整的JSON格式数据。
 `
 
 type BasicNode struct {
-	Id   int     `json:"id"`
-	Name string  `json:"name"`
-	Lat  float64 `json:"lat"`
-	Lon  float64 `json:"lon"`
+	Id   int    `json:"id"`
+	Node int    `json:"node"`
+	Name string `json:"name"`
 }
 
 type TargetNode struct {
-	Id   int     `json:"id"`
-	Name string  `json:"name"`
-	Lat  float64 `json:"lat"`
-	Lon  float64 `json:"lon"`
-	Tag  string  `json:"tag"`
+	Id          int      `json:"id"`
+	Node        int      `json:"node"`
+	Name        string   `json:"name"`
+	Type        string   `json:"type"`
+	Tags        []string `json:"tags"`
+	Description string   `json:"description"`
+	Heat        int      `json:"heat"`
+	Rate        float32  `json:"rate"`
 }
 
 type NodeTagGenerator struct {
-	modelConfig *ai.ModelConfig
+	model ai.LLM
 }
 
-func NewNodeTagGenerator(modelConfig *ai.ModelConfig) *NodeTagGenerator {
+func NewNodeTagGenerator(model ai.LLM) *NodeTagGenerator {
 	return &NodeTagGenerator{
-		modelConfig: modelConfig,
+		model: model,
 	}
 }
 
@@ -54,17 +60,14 @@ func (agent *NodeTagGenerator) GenerateTag(ctx context.Context, nodes []BasicNod
 		return []TargetNode{}, err
 	}
 
-	question := ai.AiQuestion{
+	question := ai.Messages{
 		SystemPrompt: prompt,
 		History:      []ai.HistoryEntry{},
 		Question:     string(src),
 	}
 
 	// 调用 LLM 进行推理
-	questionChan, err := ai.InvokeLLM(ctx, question, *agent.modelConfig)
-	if err != nil {
-		return []TargetNode{}, err
-	}
+	questionChan := ai.InvokeLLM(ctx, question, agent.model)
 
 	answer := ""
 	for msg := range questionChan {
@@ -94,16 +97,17 @@ func validate(src []BasicNode, result []TargetNode) error {
 	}
 
 	for i := range src {
-		if src[i].Id != result[i].Id || src[i].Name != result[i].Name || src[i].Lat != result[i].Lat || src[i].Lon != result[i].Lon {
+		if src[i].Id != result[i].Id || src[i].Node != result[i].Node || src[i].Name != result[i].Name {
 			logrus.Warnf("the src and result is mismatch, mismatch entries have been corrected.\nsrc: %v,\nresult: %v\n", src[i], result[i])
 			result[i].Id = src[i].Id
 			result[i].Name = src[i].Name
-			result[i].Lat = src[i].Lat
-			result[i].Lon = src[i].Lon
 		}
-		if result[i].Tag == "" {
-			logrus.Warnf("the tag is empty, set it to default.\nsrc: %v,\nresult: %v\n", src[i], result[i])
-			result[i].Tag = "default"
+		if result[i].Type == "" {
+			logrus.Warnf("the type is empty, set it to undefined.\nsrc: %v,\nresult: %v\n", src[i], result[i])
+			result[i].Type = "undefined"
+		}
+		if len(result[i].Tags) == 0 {
+			logrus.Warnf("the tag is empty.")
 		}
 	}
 

@@ -11,5 +11,6 @@ func InitRouter(app *fiber.App, c *services.Controller) {
 
 	app.Group("/api/agent").
 		Use(cors.New()).
-		Post("/diary_writer", c.DiaryWriter.DiaryWriterHandler)
+		Post("/diary_writer", c.DiaryWriter.DiaryWriterHandler).
+		Post("/task_assigner", c.TaskAssigner.AssignTaskHandler)
 }

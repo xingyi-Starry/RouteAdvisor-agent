@@ -1,11 +1,13 @@
 package services
 
 type Controller struct {
-	DiaryWriter *DiaryWriterService
+	DiaryWriter  *DiaryWriterService
+	TaskAssigner *TaskAssignerService
 }
 
-func NewController(diaryWriter *DiaryWriterService) *Controller {
+func NewController(diaryWriter *DiaryWriterService, taskAssigner *TaskAssignerService) *Controller {
 	return &Controller{
-		DiaryWriter: diaryWriter,
+		DiaryWriter:  diaryWriter,
+		TaskAssigner: taskAssigner,
 	}
 }

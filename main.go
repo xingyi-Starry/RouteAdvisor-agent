@@ -2,6 +2,7 @@ package main
 
 import (
 	"route-advisor-agent/agents/diary_writer"
+	"route-advisor-agent/agents/task_assigner"
 	"route-advisor-agent/config"
 	"route-advisor-agent/router"
 	"route-advisor-agent/services"
@@ -43,6 +44,7 @@ func InitModel(env *config.EnvConfig) ai.LLM {
 
 func InitController(model ai.LLM) *services.Controller {
 	diaryWriter := services.NewDiaryWriterService(diary_writer.NewDiaryWriter(model))
-	controller := services.NewController(diaryWriter)
+	taskAssigner := services.NewTaskAssignerService(task_assigner.NewTaskAssigner(model))
+	controller := services.NewController(diaryWriter, taskAssigner)
 	return controller
 }
